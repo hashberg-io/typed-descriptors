@@ -51,7 +51,7 @@ You can install the latest release from `PyPI <https://pypi.org/project/typed-de
 Usage
 -----
 
-Classes from the :mod:`typed_descriptors` module can be used to create statically typechecked descriptors which implement the following features:
+Classes from the ``typed_descriptors`` module can be used to create statically typechecked descriptors which implement the following features:
 
 - attributes with runtime typechecking on write
 - attributes with validation on write
@@ -98,6 +98,7 @@ Below is a simple example displaying all features listed above:
     myobj.y = ["a", "b", "c", "d"]            # ValueError (lenght of y is not 3)
     myobj.y = 5                               # TypeError (type of y is not 'Sequence')
     myobj.y = [2, 3, 5]                       # TypeError (type of y is not 'Sequence[str]')
+
 
 API
 ---

@@ -1,3 +1,4 @@
 python -m build
-python -m twine upload --skip-existing dist/*
+python -m twine check dist/*
+python -m twine upload --verbose --skip-existing dist/*
 pause
