@@ -2,22 +2,8 @@
     Abstract base class for descriptors backed by protected/private attributes.
 """
 
+# Part of typed-descriptors
 # Copyright (C) 2023 Hashberg Ltd
-
-# This library is free software; you can redistribute it and/or
-# modify it under the terms of the GNU Lesser General Public
-# License as published by the Free Software Foundation; either
-# version 2.1 of the License, or (at your option) any later version.
-
-# This library is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-# Lesser General Public License for more details.
-
-# You should have received a copy of the GNU Lesser General Public
-# License along with this library; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
-# USA
 
 from __future__ import annotations
 from abc import abstractmethod
@@ -26,7 +12,6 @@ from typing import (
     Any,
     Generic,
     Literal,
-    MutableSequence,
     Optional,
     Type,
     TypeVar,
@@ -52,8 +37,9 @@ class DescriptorBase(Generic[T]):
 
     - if the optional kwarg ``attr_name`` is specified in the constructor,
       the descriptor uses an attribute with that given name
-    - otherwise, the descriptor uses an attribute obtained from the
-      descriptor name by prepending an underscore
+    - otherwise, the descriptor uses a private attribute obtained from the
+      descriptor name by prepending one or two underscores (depending on
+      whether the descriptor name itself starts with underscore or not, resp.).
 
     If the attribute name starts with two underscores but does not end with
     two underscores, name-mangling is automatically performed.
@@ -186,7 +172,8 @@ class DescriptorBase(Generic[T]):
         # 2. Get the backing attribute name (not yet name-mangled):
         given_attr_name = self.__given_attr_name
         if given_attr_name is None:
-            given_attr_name = f"_{name}"
+            attr_name_prefix = "_" if name.startswith("_") else "__"
+            given_attr_name = f"{attr_name_prefix}{name}"
         elif given_attr_name == name:
             raise ValueError(
                 f"Name of backing attribute for descriptor {self.name!r} "

@@ -18,7 +18,7 @@ def test_base_set_name_slots(attr_name: Optional[str]) -> None:
     if attr_name is not None:
         slot_name = attr_name
     else:
-        slot_name = "_x"
+        slot_name = "__x"
     class C:
         x = Attr(int, lambda _, x: x >= 0, attr_name=attr_name)
         __slots__ = (slot_name,)
