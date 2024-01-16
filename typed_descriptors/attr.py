@@ -22,7 +22,15 @@
 from __future__ import annotations
 import sys
 from typing import (
-    Any, Literal, Optional, Protocol, Type, TypeVar, cast, final, overload
+    Any,
+    Literal,
+    Optional,
+    Protocol,
+    Type,
+    TypeVar,
+    cast,
+    final,
+    overload,
 )
 from typing_validation import validate
 from .base import DescriptorBase, T
@@ -35,35 +43,37 @@ else:
 T_contra = TypeVar("T_contra", contravariant=True)
 """ Contravariant type variable for generic values. """
 
+
 class ValidatorFunction(Protocol[T_contra]):
     """
-        Structural type for the validator function of a :class:`Attr`.
+    Structural type for the validator function of a :class:`Attr`.
     """
 
     def __call__(self, instance: Any, value: T_contra, /) -> bool:
         """
-            Validates the given value for assignment to a :class:`Attr`,
-            in the context of the given instance.
+        Validates the given value for assignment to a :class:`Attr`,
+        in the context of the given instance.
 
-            Called passing the current ``instance`` and the ``value`` that is
-            to be assigned to the descriptor.
-            At the time when the validator function for a descriptor is invoked,
-            the given ``value`` has already passed its runtime typecheck.
-            Validator functions can use ``instance`` to perform validation
-            involving other descriptors for the same class.
+        Called passing the current ``instance`` and the ``value`` that is
+        to be assigned to the descriptor.
+        At the time when the validator function for a descriptor is invoked,
+        the given ``value`` has already passed its runtime typecheck.
+        Validator functions can use ``instance`` to perform validation
+        involving other descriptors for the same class.
         """
+
 
 class Attr(DescriptorBase[T]):
     """
-        A descriptor class for attributes, supporting:
+    A descriptor class for attributes, supporting:
 
-        - static type checking for the attribute value
-        - runtime type checking of values assigned to the attribute
-        - optional runtime validation of values assigned to the attribute
-        - optional read-only restrictions on the attribute (set once)
+    - static type checking for the attribute value
+    - runtime type checking of values assigned to the attribute
+    - optional runtime validation of values assigned to the attribute
+    - optional read-only restrictions on the attribute (set once)
 
-        See :class:`DescriptorBase` for details on how the attribute value is
-        stored in each instance.
+    See :class:`DescriptorBase` for details on how the attribute value is
+    stored in each instance.
     """
 
     __readonly: bool
@@ -72,53 +82,65 @@ class Attr(DescriptorBase[T]):
     __slots__ = ("__readonly", "__validator")
 
     @overload
-    def __init__(self, ty: Type[T], /,
-                 validator: Optional[ValidatorFunction[T]] = None,
-                 *,
-                 readonly: bool = False,
-                 attr_name: Optional[str] = None,
-                 lax: Literal[False] = False) -> None:
+    def __init__(
+        self,
+        ty: Type[T],
+        /,
+        validator: Optional[ValidatorFunction[T]] = None,
+        *,
+        readonly: bool = False,
+        attr_name: Optional[str] = None,
+        lax: Literal[False] = False,
+    ) -> None:
         ...
 
     @overload
-    def __init__(self, ty: Any, /,
-                 validator: Optional[ValidatorFunction[T]] = None,
-                 *,
-                 readonly: bool = False,
-                 attr_name: Optional[str] = None,
-                 lax: Literal[True]) -> None:
+    def __init__(
+        self,
+        ty: Any,
+        /,
+        validator: Optional[ValidatorFunction[T]] = None,
+        *,
+        readonly: bool = False,
+        attr_name: Optional[str] = None,
+        lax: Literal[True],
+    ) -> None:
         ...
 
-    def __init__(self, ty: Type[T], /,
-                 validator: Optional[ValidatorFunction[T]] = None,
-                 *,
-                 readonly: bool = False,
-                 attr_name: Optional[str] = None,
-                 lax: bool = False) -> None:
+    def __init__(
+        self,
+        ty: Type[T],
+        /,
+        validator: Optional[ValidatorFunction[T]] = None,
+        *,
+        readonly: bool = False,
+        attr_name: Optional[str] = None,
+        lax: bool = False,
+    ) -> None:
         """
-            Creates a new attribute with the given type and optional validator.
+        Creates a new attribute with the given type and optional validator.
 
-            :param ty: the type of the attribute
-            :param validator: an optional validator function for the attribute
-            :param readonly: whether the attribute is read-only
-            :param attr_name: the name of the backing attribute for the
-                              attribute, or :obj:`None` to use a default name
-            :param lax: if set to :obj:`True`, suppresses static typechecking
-                        of the ``ty`` argument, allowing more general types to
-                        be specified for runtime typechecks.
+        :param ty: the type of the attribute
+        :param validator: an optional validator function for the attribute
+        :param readonly: whether the attribute is read-only
+        :param attr_name: the name of the backing attribute for the
+                          attribute, or :obj:`None` to use a default name
+        :param lax: if set to :obj:`True`, suppresses static typechecking
+                    of the ``ty`` argument, allowing more general types to
+                    be specified for runtime typechecks.
 
-            :raises TypeError: if the type is not a valid type
-            :raises TypeError: if the validator is not callable
+        :raises TypeError: if the type is not a valid type
+        :raises TypeError: if the validator is not callable
 
-            .. note ::
+        .. note ::
 
-                If ``lax=True`` is set, the static typechecker can no longer
-                infer ``T`` from the ``ty`` argument. It will infer ``T`` from
-                the ``validator`` argument, if it is given and it is statically
-                typed; otherwise, a static type for the descriptor will have to
-                be set by hand.
+            If ``lax=True`` is set, the static typechecker can no longer
+            infer ``T`` from the ``ty`` argument. It will infer ``T`` from
+            the ``validator`` argument, if it is given and it is statically
+            typed; otherwise, a static type for the descriptor will have to
+            be set by hand.
 
-            :meta public:
+        :meta public:
         """
         super().__init__(ty, attr_name=attr_name)
         if validator is not None and not callable(validator):
@@ -132,7 +154,7 @@ class Attr(DescriptorBase[T]):
     @property
     def readonly(self) -> bool:
         """
-            Whether the attribute is readonly.
+        Whether the attribute is readonly.
         """
         return self.__readonly
 
@@ -140,25 +162,25 @@ class Attr(DescriptorBase[T]):
     @property
     def validator(self) -> Optional[ValidatorFunction[T]]:
         """
-            The custom validator function for the attribute,
-            or :obj:`None` if no validator was specified.
+        The custom validator function for the attribute,
+        or :obj:`None` if no validator was specified.
 
-            There are two ways in which the validator can trigger an error:
+        There are two ways in which the validator can trigger an error:
 
-            - By returning :obj:`False`: a :obj:`ValueError` is raised
-            - By raising any exception as part of its body: the exception is
-              caught as part of a `try...except` block, and a :obj:`ValueError`
-              is raised from it (preserving the original error information).
+        - By returning :obj:`False`: a :obj:`ValueError` is raised
+        - By raising any exception as part of its body: the exception is
+          caught as part of a `try...except` block, and a :obj:`ValueError`
+          is raised from it (preserving the original error information).
 
-            In the second case, the validator should return :obj:`True` at the
-            end, to signal that validation was successful.
+        In the second case, the validator should return :obj:`True` at the
+        end, to signal that validation was successful.
         """
         return self.__validator
 
     @final
     def is_defined_on(self, instance: Any) -> bool:
         """
-            Wether the attribute is defined on the given instance.
+        Wether the attribute is defined on the given instance.
         """
         validate(instance, self.owner)
         return hasattr(instance, self.attr_name)
@@ -172,18 +194,18 @@ class Attr(DescriptorBase[T]):
         ...
 
     @final
-    def __get__(self, instance: Any, _: Type[Any]) -> T|Self:
+    def __get__(self, instance: Any, _: Type[Any]) -> T | Self:
         """
-            If the descriptor is accessed on an instance, returns the value of
-            the attribute on the given instance.
+        If the descriptor is accessed on an instance, returns the value of
+        the attribute on the given instance.
 
-            If the descriptor is accessed on the owner class, i.e. if
-            ``instance`` is :obj:`None`, returns the :class:`Attr` object.
+        If the descriptor is accessed on the owner class, i.e. if
+        ``instance`` is :obj:`None`, returns the :class:`Attr` object.
 
-            :raises AttributeError: if the attribute is not defined,
-                                    see :meth:`is_defined_on`.
+        :raises AttributeError: if the attribute is not defined,
+                                see :meth:`is_defined_on`.
 
-            :meta public:
+        :meta public:
         """
         if instance is None:
             return self
@@ -195,15 +217,15 @@ class Attr(DescriptorBase[T]):
     @final
     def __set__(self, instance: Any, value: T) -> None:
         """
-            Sets the value of the descriptor on the given instance.
+        Sets the value of the descriptor on the given instance.
 
-            :raises TypeError: if the value has the wrong type
-            :raises ValueError: if a custom validator is specified and the
-                                value is invalid
-            :raises AttributeError: if the attribute is readonly and it already
-                                    has a value assigned to it
+        :raises TypeError: if the value has the wrong type
+        :raises ValueError: if a custom validator is specified and the
+                            value is invalid
+        :raises AttributeError: if the attribute is readonly and it already
+                                has a value assigned to it
 
-            :meta public:
+        :meta public:
         """
         validate(value, self.type)
         validator = self.validator
@@ -228,13 +250,13 @@ class Attr(DescriptorBase[T]):
     @final
     def __delete__(self, instance: Any) -> None:
         """
-            Deletes the value of the descriptor on the given instance.
+        Deletes the value of the descriptor on the given instance.
 
-            :raises AttributeError: if the attribute is readonly
-            :raises AttributeError: if the attribute is not defined,
-                                    see :meth:`is_defined_on`.
+        :raises AttributeError: if the attribute is readonly
+        :raises AttributeError: if the attribute is not defined,
+                                see :meth:`is_defined_on`.
 
-            :meta public:
+        :meta public:
         """
         if self.readonly:
             raise AttributeError(
@@ -246,16 +268,16 @@ class Attr(DescriptorBase[T]):
 
     def __str__(self) -> str:
         """
-            Representation of this attribute, inclusive of the following info:
+        Representation of this attribute, inclusive of the following info:
 
-            - the :attr:`owner` name
-            - the attribute :attr:`name`
+        - the :attr:`owner` name
+        - the attribute :attr:`name`
 
-            An example:
+        An example:
 
-            .. code-block ::
+        .. code-block ::
 
-                Color.hue
+            Color.hue
         """
         type_name = type(self).__name__
         owner_name = self.owner.__name__
@@ -264,20 +286,20 @@ class Attr(DescriptorBase[T]):
 
     def __repr__(self) -> str:
         """
-            Representation of this attribute, inclusive of the following info:
+        Representation of this attribute, inclusive of the following info:
 
-            - the :class:`Attr` subclass
-            - the :attr:`owner` name
-            - the attribute :attr:`name`
-            - the attribute :attr:`type`
-            - optional ``readonly`` qualifier
+        - the :class:`Attr` subclass
+        - the :attr:`owner` name
+        - the attribute :attr:`name`
+        - the attribute :attr:`type`
+        - optional ``readonly`` qualifier
 
-            Two examples:
+        Two examples:
 
-            .. code-block ::
+        .. code-block ::
 
-                <Attr Color.hue: str>
-                <readonly Attr Color.saturation: int>
+            <Attr Color.hue: str>
+            <readonly Attr Color.saturation: int>
 
         """
         descr_cls = type(self).__name__
