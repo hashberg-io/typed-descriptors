@@ -6,16 +6,16 @@
 # Copyright (C) 2023 Hashberg Ltd
 
 from __future__ import annotations
+from inspect import signature
 import sys
 from typing import (
     Any,
-    Literal,
     Optional,
     Protocol,
     Type,
     TypeVar,
-    cast,
     final,
+    get_type_hints,
     overload,
 )
 from typing_validation import validate
@@ -49,6 +49,53 @@ class ValidatorFunction(Protocol[T_contra]):
         """
 
 
+def validate_validator_fun(validator_fun: ValidatorFunction[T], /) -> None:
+    """
+    Runtime validation for validator functions.
+
+    :raises TypeError: if the argument is not a validator function
+    """
+    if not callable(validator_fun):
+        raise TypeError("Validator function must be callable.")
+    if len(signature(validator_fun).parameters) != 2:
+        raise TypeError("Validator function must take exactly two arguments.")
+
+
+def validator_fun_value_type(validator_fun: ValidatorFunction[T], /) -> Any:
+    """
+    Returns the type annotation for the ``value`` argument of a validator
+    function. Used by :meth:`Attr.validator` to infer the :class:`Attr`
+    type from the validator function type hints.
+
+    :raises TypeError: if the argument is not a validator function
+    :raises ValueError: if the function doesn't have an explicit annotation
+                        for its ``value`` argument type or its return type.
+    """
+    validate_validator_fun(validator_fun)
+    validator_fun_types = get_type_hints(validator_fun)
+    validator_fun_sig = signature(validator_fun)
+    validator_fun_params = tuple(validator_fun_sig.parameters.keys())
+    value_argname = validator_fun_params[1]
+    if value_argname not in validator_fun_types:
+        raise ValueError(
+            "Validator function must explicitly annotate the type for its "
+            f"second argument {value_argname!r}."
+        )
+    return validator_fun_types[value_argname]
+
+
+class ValidatedAttrFactory(Protocol):
+    """
+    Structural type for functions which create :class:`Attr` instances
+    from validator functions.
+    """
+
+    def __call__(self, validator_fun: ValidatorFunction[T], /) -> Attr[T]:
+        """
+        Returns a validated :class:`Attr` from a validator function.
+        """
+
+
 class Attr(DescriptorBase[T]):
     """
     A descriptor class for attributes, supporting:
@@ -62,46 +109,127 @@ class Attr(DescriptorBase[T]):
     stored in each instance.
     """
 
+    @staticmethod
+    @overload
+    def validator(
+        validator_fun: ValidatorFunction[T],
+        /,
+        *,
+        readonly: bool = False,
+        backed_by: Optional[str] = None,
+    ) -> Attr[T]:
+        ...
+
+    @staticmethod
+    @overload
+    def validator(
+        validator_fun: None = None,
+        /,
+        *,
+        readonly: bool = False,
+        backed_by: Optional[str] = None,
+    ) -> ValidatedAttrFactory:
+        ...
+
+    @staticmethod
+    def validator(
+        validator_fun: Optional[ValidatorFunction[T]] = None,
+        /,
+        *,
+        readonly: bool = False,
+        backed_by: Optional[str] = None,
+    ) -> ValidatedAttrFactory | Attr[T]:
+        """
+        Decorator used to create an :class:`Attr` from a validator function,
+        optionally specifying a readonly modifier and a backing attribute.
+
+        It can be used directly, for mutable attributes with default backing
+        attribute name:
+
+            .. code-block ::
+
+                class MyClass:
+
+                    @Attr.validator
+                    def x(self, value: Sequence[str]) -> bool:
+                        ''' Validator function for attribute 'C.x'. '''
+                        return 1 <= len(value) <= 3
+
+        It can be used by supplying ``readonly`` and ``backed_by`` values,
+        for more general attributes:
+
+            .. code-block ::
+
+                class MyClass:
+
+                    @Attr.validator(readonly=True)
+                    def x(self, value: int|str) -> bool:
+                        ''' Validator function for readonly attribute 'C.x'. '''
+                        if isinstance(value, int):
+                            return value > 0
+                        return len(value) > 0
+
+                    @Attr.validator(backed_by='_w')
+                    def w(self, value: Sequence[int]) -> bool:
+                        ''' Validator function for mutable attribute 'C.w'. '''
+                        return len(value) in range(3)
+
+                    __slots__ = ("__x", "_w")
+                    #    default ^^^^^  ^^^^ custom
+                    #        backing attributes
+
+        """
+        if validator_fun is not None:
+            ty = validator_fun_value_type(validator_fun)
+            return Attr(
+                ty,
+                validator=validator_fun,
+                readonly=readonly,
+                backed_by=backed_by,
+            )
+        return lambda validator_fun: Attr.validator(
+            validator_fun, readonly=readonly, backed_by=backed_by
+        )
+
     __readonly: bool
-    __validator: Optional[ValidatorFunction[T]]
+    __validator_fun: Optional[ValidatorFunction[T]]
 
-    __slots__ = ("__readonly", "__validator")
+    __slots__ = ("__readonly", "__validator_fun")
 
     @overload
     def __init__(
         self,
-        ty: Type[T],
+        type: Type[T],
         /,
         validator: Optional[ValidatorFunction[T]] = None,
         *,
         readonly: bool = False,
-        attr_name: Optional[str] = None,
-        lax: Literal[False] = False,
+        backed_by: Optional[str] = None,
     ) -> None:
+        # pylint: disable = redefined-builtin
         ...
 
     @overload
     def __init__(
         self,
-        ty: Any,
+        type: Any,
         /,
         validator: Optional[ValidatorFunction[T]] = None,
         *,
         readonly: bool = False,
-        attr_name: Optional[str] = None,
-        lax: Literal[True],
+        backed_by: Optional[str] = None,
     ) -> None:
+        # pylint: disable = redefined-builtin
         ...
 
     def __init__(
         self,
-        ty: Type[T],
+        type: Type[T] | Any,
         /,
         validator: Optional[ValidatorFunction[T]] = None,
         *,
         readonly: bool = False,
-        attr_name: Optional[str] = None,
-        lax: bool = False,
+        backed_by: Optional[str] = None,
     ) -> None:
         """
         Creates a new attribute with the given type and optional validator.
@@ -109,31 +237,19 @@ class Attr(DescriptorBase[T]):
         :param ty: the type of the attribute
         :param validator: an optional validator function for the attribute
         :param readonly: whether the attribute is read-only
-        :param attr_name: the name of the backing attribute for the
+        :param backed_by: the name of the backing attribute for the
                           attribute, or :obj:`None` to use a default name
-        :param lax: if set to :obj:`True`, suppresses static typechecking
-                    of the ``ty`` argument, allowing more general types to
-                    be specified for runtime typechecks.
 
         :raises TypeError: if the type is not a valid type
         :raises TypeError: if the validator is not callable
 
-        .. note ::
-
-            If ``lax=True`` is set, the static typechecker can no longer
-            infer ``T`` from the ``ty`` argument. It will infer ``T`` from
-            the ``validator`` argument, if it is given and it is statically
-            typed; otherwise, a static type for the descriptor will have to
-            be set by hand.
-
         :meta public:
         """
-        super().__init__(ty, attr_name=attr_name)
-        if validator is not None and not callable(validator):
-            raise TypeError(
-                f"Expected callable 'validator', got {validator!r}."
-            )
-        self.__validator = validator
+        # pylint: disable = redefined-builtin
+        super().__init__(type, backed_by=backed_by)
+        if validator is not None:
+            validate_validator_fun(validator)
+        self.__validator_fun = validator
         self.__readonly = bool(readonly)
 
     @final
@@ -146,7 +262,7 @@ class Attr(DescriptorBase[T]):
 
     @final
     @property
-    def validator(self) -> Optional[ValidatorFunction[T]]:
+    def validator_fun(self) -> Optional[ValidatorFunction[T]]:
         """
         The custom validator function for the attribute,
         or :obj:`None` if no validator was specified.
@@ -161,7 +277,7 @@ class Attr(DescriptorBase[T]):
         In the second case, the validator should return :obj:`True` at the
         end, to signal that validation was successful.
         """
-        return self.__validator
+        return self.__validator_fun
 
     @final
     def is_defined_on(self, instance: Any) -> bool:
@@ -169,7 +285,7 @@ class Attr(DescriptorBase[T]):
         Wether the attribute is defined on the given instance.
         """
         validate(instance, self.owner)
-        return hasattr(instance, self.attr_name)
+        return self._is_set_on(instance)
 
     @overload
     def __get__(self, instance: None, _: Type[Any]) -> Self:
@@ -196,7 +312,8 @@ class Attr(DescriptorBase[T]):
         if instance is None:
             return self
         try:
-            return cast(T, getattr(instance, self.attr_name))
+            return self._get_on(instance)
+            # return cast(T, getattr(instance, self.attr_name))
         except AttributeError:
             raise AttributeError(f"Attribute {self} is not set.") from None
 
@@ -205,16 +322,21 @@ class Attr(DescriptorBase[T]):
         """
         Sets the value of the descriptor on the given instance.
 
+        :raises AttributeError: if the attribute is readonly and it already
+                                has a value assigned to it
         :raises TypeError: if the value has the wrong type
         :raises ValueError: if a custom validator is specified and the
                             value is invalid
-        :raises AttributeError: if the attribute is readonly and it already
-                                has a value assigned to it
 
         :meta public:
         """
+        if self.readonly:
+            if self._is_set_on(instance):
+                raise AttributeError(
+                    f"Attribute {self} is readonly: it can only be set once."
+                )
         validate(value, self.type)
-        validator = self.validator
+        validator = self.__validator_fun
         if validator is not None:
             try:
                 res = validator(instance, value)
@@ -226,12 +348,7 @@ class Attr(DescriptorBase[T]):
                 raise ValueError(
                     f"Invalid value for attribute {self}: {value!r}"
                 ) from e
-        if self.readonly:
-            if hasattr(instance, self.attr_name):
-                raise AttributeError(
-                    f"Attribute {self} is readonly: it can only be set once."
-                )
-        setattr(instance, self.attr_name, value)
+        self._set_on(instance, value)
 
     @final
     def __delete__(self, instance: Any) -> None:
@@ -248,9 +365,9 @@ class Attr(DescriptorBase[T]):
             raise AttributeError(
                 f"Attribute {self.name!r} is readonly: it cannot be deleted."
             )
-        if not hasattr(instance, self.attr_name):
+        if not self._is_set_on(instance):
             raise AttributeError(f"Attribute {self} is not set.")
-        delattr(instance, self.attr_name)
+        self._del_on(instance)
 
     def __str__(self) -> str:
         """
@@ -267,8 +384,8 @@ class Attr(DescriptorBase[T]):
         """
         type_name = type(self).__name__
         owner_name = self.owner.__name__
-        attr_name = self.attr_name
-        return f"{type_name} {owner_name}.{attr_name}"
+        name = self.name
+        return f"{type_name} {owner_name}.{name}"
 
     def __repr__(self) -> str:
         """
@@ -290,7 +407,7 @@ class Attr(DescriptorBase[T]):
         """
         descr_cls = type(self).__name__
         owner = self.owner.__name__
-        name = self.attr_name
+        name = self.name
         ty = (
             self.type.__name__
             if isinstance(self.type, type)

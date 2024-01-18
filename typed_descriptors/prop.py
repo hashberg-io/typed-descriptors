@@ -6,16 +6,16 @@
 # Copyright (C) 2023 Hashberg Ltd
 
 from __future__ import annotations
+from inspect import signature
 import sys
 from typing import (
     Any,
-    Literal,
     Optional,
     Protocol,
     Type,
     TypeVar,
-    cast,
     final,
+    get_type_hints,
     overload,
 )
 from typing_validation import validate
@@ -42,6 +42,51 @@ class ValueFunction(Protocol[T_co]):
         """
 
 
+def validate_value_fun(value_fun: ValueFunction[T], /) -> None:
+    """
+    Runtime validation for value functions.
+
+    :raises TypeError: if the argument is not a value function
+    :raises ValueError: if the function doesn't have an explicit annotation
+                        for its return type.
+    """
+    if not callable(value_fun):
+        raise TypeError("Value function must be callable.")
+    if len(signature(value_fun).parameters) != 1:
+        raise TypeError("Value function must take exactly one argument.")
+
+
+def value_fun_return_type(value_fun: ValueFunction[T], /) -> Any:
+    """
+    Returns the return type annotation of a value function.
+    Used by :func:`Prop` to infer the property type from the value function
+    return type annotation.
+
+    :raises TypeError: if the argument is not a value function
+    :raises ValueError: if the function doesn't have an explicit annotation
+                        for its return type.
+    """
+    validate_value_fun(value_fun)
+    value_fun_types = get_type_hints(value_fun)
+    if "return" not in value_fun_types:
+        raise ValueError(
+            "Value function must explicitly annotate its return type."
+        )
+    return value_fun_types["return"]
+
+
+class PropFactory(Protocol):
+    """
+    Structural type for functions which create :class:`Prop` instances
+    from value functions.
+    """
+
+    def __call__(self, value_fun: ValueFunction[T], /) -> Prop[T]:
+        """
+        Returns a validated :class:`Prop` from a value function.
+        """
+
+
 class Prop(DescriptorBase[T]):
     """
     A descriptor class for cached properties, supporting:
@@ -49,9 +94,39 @@ class Prop(DescriptorBase[T]):
     - static type checking for the property value
     - lazy caching (value only cached at first read)
 
-    See :class:`DescriptorBase` for details on how the property value is
+    See :class:`~typed_descriptors.base.DescriptorBase` for details on how the property value is
     cached in each instance.
     """
+
+    @staticmethod
+    @overload
+    def value(
+        value_fun: ValueFunction[T], /, *, backed_by: Optional[str] = None
+    ) -> Prop[T]:
+        ...
+
+    @staticmethod
+    @overload
+    def value(
+        value_fun: None = None, /, *, backed_by: Optional[str] = None
+    ) -> PropFactory:
+        ...
+
+    @staticmethod
+    def value(
+        value_fun: Optional[ValueFunction[T]] = None,
+        /,
+        *,
+        backed_by: Optional[str] = None,
+    ) -> PropFactory | Prop[T]:
+        """
+        An alias for :func:`cached_property`.
+
+        It offers a way to declare :class:`Prop` which is stylisticallly
+        aligned to the :meth:`Attr.validator<typed_descriptors.attr.Attr.validator>`
+        decorator for attributes.
+        """
+        return cached_property(value_fun, backed_by=backed_by)
 
     __value_fun: ValueFunction[T]
 
@@ -60,61 +135,51 @@ class Prop(DescriptorBase[T]):
     @overload
     def __init__(
         self,
-        ty: Type[T],
-        /,
+        type: Type[T],
         value: ValueFunction[T],
+        /,
         *,
-        attr_name: Optional[str] = None,
-        lax: Literal[False] = False,
+        backed_by: Optional[str] = None,
     ) -> None:
+        # pylint: disable = redefined-builtin
         ...
 
     @overload
     def __init__(
         self,
-        ty: Any,
-        /,
+        type: Any,
         value: ValueFunction[T],
+        /,
         *,
-        attr_name: Optional[str] = None,
-        lax: Literal[True],
+        backed_by: Optional[str] = None,
     ) -> None:
+        # pylint: disable = redefined-builtin
         ...
 
     def __init__(
         self,
-        ty: Type[T],
-        /,
+        type: Type[T] | Any,
         value: ValueFunction[T],
+        /,
         *,
-        attr_name: Optional[str] = None,
-        lax: bool = False,
+        backed_by: Optional[str] = None,
     ) -> None:
         """
         Creates a new property with the given type and value function.
 
-        :param ty: the type of the property
         :param value: function computing the property value
+        :param type: the type of the property
         :param attr_name: the name of the backing attribute for the property
                           cache, or :obj:`None` to use a default name
-        :param lax: if set to :obj:`True`, suppresses static typechecking
-                    of the ``ty`` argument, allowing more general types to
-                    be specified for runtime typechecks.
 
         :raises TypeError: if the type is not a valid type
         :raises TypeError: if the value function is not callable
 
-        .. note ::
-
-            If ``lax=True`` is set, the static typechecker can no longer
-            infer ``T`` from the ``ty`` argument. It will infer ``T`` from
-            the ``validator`` argument, if it is given and it is statically
-            typed; otherwise, a static type for the descriptor will have to
-            be set by hand.
-
         :meta public:
         """
-        super().__init__(ty, attr_name=attr_name)
+        # pylint: disable = redefined-builtin
+        validate_value_fun(value)
+        super().__init__(type, backed_by=backed_by)
         if value is not None and not callable(value):
             raise TypeError(f"Expected callable 'value', got {value!r}.")
         self.__value_fun = value
@@ -136,7 +201,7 @@ class Prop(DescriptorBase[T]):
         Whether the property is cached on the given instance.
         """
         validate(instance, self.owner)
-        return hasattr(instance, self.attr_name)
+        return self._is_set_on(instance)
 
     @final
     def cache_on(self, instance: Any) -> None:
@@ -148,11 +213,11 @@ class Prop(DescriptorBase[T]):
         :raises AttributeError: if the property is already cached.
         """
         validate(instance, self.owner)
-        if hasattr(instance, self.attr_name):
+        if self._is_set_on(instance):
             raise AttributeError(f"Property {self} is already cached.")
         value = self.value_fun(instance)
         validate(value, self.type)
-        setattr(instance, self.attr_name, value)
+        self._set_on(instance, value)
 
     @overload
     def __get__(self, instance: None, _: Type[Any]) -> Self:
@@ -176,11 +241,11 @@ class Prop(DescriptorBase[T]):
         if instance is None:
             return self
         try:
-            return cast(T, getattr(instance, self.attr_name))
+            return self._get_on(instance)
         except AttributeError:
             value = self.value_fun(instance)
             validate(value, self.type)
-            setattr(instance, self.attr_name, value)
+            self._set_on(instance, value)
             return value
 
     __set__ = None
@@ -200,9 +265,9 @@ class Prop(DescriptorBase[T]):
 
         :meta public:
         """
-        if not hasattr(instance, self.attr_name):
+        if not self._is_set_on(instance):
             raise AttributeError(f"Property {self} is not cached.")
-        delattr(instance, self.attr_name)
+        self._del_on(instance)
 
     def __str__(self) -> str:
         """
@@ -219,8 +284,8 @@ class Prop(DescriptorBase[T]):
         """
         type_name = type(self).__name__
         owner_name = self.owner.__name__
-        attr_name = self.attr_name
-        return f"{type_name} {owner_name}.{attr_name}"
+        name = self.name
+        return f"{type_name} {owner_name}.{name}"
 
     def __repr__(self) -> str:
         """
@@ -240,10 +305,76 @@ class Prop(DescriptorBase[T]):
         """
         descr_cls = type(self).__name__
         owner = self.owner.__name__
-        name = self.attr_name
+        name = self.name
         ty = (
             self.type.__name__
             if isinstance(self.type, type)
             else str(self.type)
         )
         return f"<{descr_cls} {owner}.{name}: {ty}>"
+
+
+@overload
+def cached_property(
+    value_fun: ValueFunction[T], /, *, backed_by: Optional[str] = None
+) -> Prop[T]:
+    ...
+
+
+@overload
+def cached_property(
+    value_fun: None = None, /, *, backed_by: Optional[str] = None
+) -> PropFactory:
+    ...
+
+
+def cached_property(
+    value_fun: Optional[ValueFunction[T]] = None,
+    /,
+    *,
+    backed_by: Optional[str] = None,
+) -> PropFactory | Prop[T]:
+    """
+    Decorator used to create a cached property from a value function,
+    optionally specifying a backing attribute.
+    See :class:`Prop` and :class:`DescriptorBase` for more information.
+
+    It can be used directly, for properties with default backing attribute name:
+
+    .. code-block ::
+
+        class C:
+
+            @cached_property
+            def x(self) -> Sequence[str]:
+                ''' Value function for property 'C.x'. '''
+                return 10
+
+    It can be used by supplying a custom backing attribute name to the
+    ``backed_by`` argument:
+
+    .. code-block ::
+
+        class C:
+
+            @cached_property(backed_by="_x")
+            def x(self) -> Sequence[str]:
+                ''' Value function for property 'C.x'. '''
+                return 10
+
+            __slots__ = ("_x", )
+
+    .. note ::
+
+        The decorator is analogous to the built-in :func:`functools.cached_property`,
+        from which it takes its name, and it uses the same caching logic when
+        ``__dict__`` is available on owner class's instances and no custom
+        attribute name is used.
+        Contrary to its built-in counterpart, however, this decorator can be
+        used with a slotted attribute as backing attribute.
+
+    """
+    if value_fun is not None:
+        prop_type = value_fun_return_type(value_fun)
+        return Prop(prop_type, value_fun, backed_by=backed_by)
+    return lambda value_fun: cached_property(value_fun, backed_by=backed_by)

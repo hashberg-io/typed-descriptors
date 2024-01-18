@@ -7,8 +7,8 @@
 
 from __future__ import annotations
 from .attr import Attr
-from .prop import Prop
+from .prop import Prop, cached_property
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
-__all__ = ("Attr", "Prop")
+__all__ = ("Attr", "Prop", "cached_property")
