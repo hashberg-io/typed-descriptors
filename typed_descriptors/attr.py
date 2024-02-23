@@ -7,7 +7,6 @@
 
 from __future__ import annotations
 from inspect import signature
-import sys
 from typing import (
     Any,
     Optional,
