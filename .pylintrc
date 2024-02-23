@@ -14,5 +14,6 @@ disable = too-many-ancestors,
           useless-import-alias,
           duplicate-code,
           using-final-decorator-in-unsupported-version,
+          unnecessary-ellipsis
 [FORMAT]
 max-line-length=160

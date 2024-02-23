@@ -6,9 +6,10 @@
 # Copyright (C) 2023 Hashberg Ltd
 
 from __future__ import annotations
+from .base import TypedDescriptor
 from .attr import Attr
 from .prop import Prop, cached_property
 
-__version__ = "1.2.0"
+__version__ = "1.2.1"
 
-__all__ = ("Attr", "Prop", "cached_property")
+__all__ = ("TypedDescriptor", "Attr", "Prop", "cached_property")

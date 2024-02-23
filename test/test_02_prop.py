@@ -8,12 +8,12 @@ from typed_descriptors import Attr, Prop,cached_property
 @pytest.mark.parametrize("x", [0, 10])
 def test_single_prop_valid(x: int, decorator: bool) -> None:
     class C:
-        if decorator:
+        if not decorator:
             @cached_property
             def x(self) -> int:
                 return x
         else:
-            x = Prop(int, lambda _: x)
+            x = Prop(int, lambda _: x) # type: ignore
     c = C()
     assert c.x == x
 
@@ -26,7 +26,7 @@ def test_single_prop_cache(x: int, decorator: bool) -> None:
             def x(self) -> int:
                 return x
         else:
-            x = Prop(int, lambda _: x)
+            x = Prop(int, lambda _: x) # type: ignore
     c = C()
     assert not C.x.is_cached_on(c)
     assert c.x == x
@@ -41,7 +41,7 @@ def test_single_prop_cache_delete(x: int, decorator: bool) -> None:
             def x(self) -> int:
                 return x
         else:
-            x = Prop(int, lambda _: x)
+            x = Prop(int, lambda _: x) # type: ignore
     c = C()
     assert c.x == x
     del c.x
@@ -58,7 +58,7 @@ def test_single_prop_type_error(x: Any, decorator: bool) -> None:
             def x(self) -> int:
                 return x # type: ignore
         else:
-            x = Prop(int, lambda _: x)
+            x = Prop(int, lambda _: x) # type: ignore
     c = C()
     with pytest.raises(TypeError):
         assert c.x == x
@@ -72,7 +72,7 @@ def test_prop_attr_dependency(y: List[int], decorator: bool) -> None:
             def x(self) -> int:
                 return len(self.y)
         else:
-            x = Prop(int, lambda self: len(self.y))
+            x = Prop(int, lambda self: len(self.y)) # type: ignore
         y = Attr(List[int])
     c = C()
     c.y = y
@@ -87,7 +87,7 @@ def test_prop_attr_type_error(y: List[int], decorator: bool) -> None:
             def x(self) -> int:
                 return self.y # type: ignore
         else:
-            x = Prop(int, lambda self: self.y)
+            x = Prop(int, lambda self: self.y) # type: ignore
         y = Attr(List[int])
     c = C()
     c.y = y

@@ -11,6 +11,13 @@ Attr
     :members:
     :special-members: __init__, __set_name__, __set__, __get__
 
+SupportsBool
+------------
+
+.. autoclass:: typed_descriptors.attr.SupportsBool
+    :show-inheritance:
+    :members:
+
 T_contra
 --------
 

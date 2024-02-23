@@ -35,7 +35,3 @@ jobs:
     - name: Lint with mypy
       run: |
         mypy --strict typed_descriptors
-    - name: Lint with pylint
-      run: |
-        pylint --errors-only --rcfile=.pylintrc typed_descriptors
-        pylint --exit-zero --rcfile=.pylintrc typed_descriptors

@@ -18,13 +18,13 @@ from typing import (
     get_type_hints,
     overload,
 )
+from typing_extensions import Self
 from typing_validation import validate
 from .base import DescriptorBase, T
 
-if sys.version_info[1] >= 12:
-    from typing import Self
-else:
-    from typing_extensions import Self
+
+_T = TypeVar("_T")
+""" Invariant type variable for generic values, privately used. """
 
 T_co = TypeVar("T_co", covariant=True)
 """ Covariant type variable for generic values. """
@@ -40,6 +40,7 @@ class ValueFunction(Protocol[T_co]):
         Computes and returns the value for a :class:`Prop`,
         in the context of the given instance.
         """
+        ...
 
 
 def validate_value_fun(value_fun: ValueFunction[T], /) -> None:
@@ -85,6 +86,7 @@ class PropFactory(Protocol):
         """
         Returns a validated :class:`Prop` from a value function.
         """
+        ...
 
 
 class Prop(DescriptorBase[T]):
@@ -102,15 +104,13 @@ class Prop(DescriptorBase[T]):
     @overload
     def value(
         value_fun: ValueFunction[T], /, *, backed_by: Optional[str] = None
-    ) -> Prop[T]:
-        ...
+    ) -> Prop[T]: ...
 
     @staticmethod
     @overload
     def value(
         value_fun: None = None, /, *, backed_by: Optional[str] = None
-    ) -> PropFactory:
-        ...
+    ) -> PropFactory: ...
 
     @staticmethod
     def value(
@@ -129,8 +129,6 @@ class Prop(DescriptorBase[T]):
         return cached_property(value_fun, backed_by=backed_by)
 
     __value_fun: ValueFunction[T]
-
-    __slots__ = ("__value_fun",)
 
     @overload
     def __init__(
@@ -180,9 +178,10 @@ class Prop(DescriptorBase[T]):
         # pylint: disable = redefined-builtin
         validate_value_fun(value)
         super().__init__(type, backed_by=backed_by)
-        if value is not None and not callable(value):
+        if not callable(value):
             raise TypeError(f"Expected callable 'value', got {value!r}.")
         self.__value_fun = value
+        self.__doc__ = value.__doc__
 
     @final
     @property
@@ -220,12 +219,10 @@ class Prop(DescriptorBase[T]):
         self._set_on(instance, value)
 
     @overload
-    def __get__(self, instance: None, _: Type[Any]) -> Self:
-        ...
+    def __get__(self, instance: None, _: Type[Any]) -> Self: ...
 
     @overload
-    def __get__(self, instance: Any, _: Type[Any]) -> T:
-        ...
+    def __get__(self, instance: Any, _: Type[Any]) -> T: ...
 
     @final
     def __get__(self, instance: Any, _: Type[Any]) -> T | Self:
@@ -282,16 +279,14 @@ class Prop(DescriptorBase[T]):
 
             Color.hue
         """
-        type_name = type(self).__name__
         owner_name = self.owner.__name__
         name = self.name
-        return f"{type_name} {owner_name}.{name}"
+        return f"{owner_name}.{name}"
 
     def __repr__(self) -> str:
         """
         Representation of this property, inclusive of the following info:
 
-        - the :class:`Prop` subclass
         - the :attr:`owner` name
         - the property :attr:`name`
         - the property :attr:`type`
@@ -303,7 +298,6 @@ class Prop(DescriptorBase[T]):
             <Prop Color.rgb: tuple[int, int, int]>
 
         """
-        descr_cls = type(self).__name__
         owner = self.owner.__name__
         name = self.name
         ty = (
@@ -311,21 +305,19 @@ class Prop(DescriptorBase[T]):
             if isinstance(self.type, type)
             else str(self.type)
         )
-        return f"<{descr_cls} {owner}.{name}: {ty}>"
+        return f"<Prop {owner}.{name}: {ty}>"
 
 
 @overload
 def cached_property(
     value_fun: ValueFunction[T], /, *, backed_by: Optional[str] = None
-) -> Prop[T]:
-    ...
+) -> Prop[T]: ...
 
 
 @overload
 def cached_property(
     value_fun: None = None, /, *, backed_by: Optional[str] = None
-) -> PropFactory:
-    ...
+) -> PropFactory: ...
 
 
 def cached_property(
@@ -377,4 +369,8 @@ def cached_property(
     if value_fun is not None:
         prop_type = value_fun_return_type(value_fun)
         return Prop(prop_type, value_fun, backed_by=backed_by)
-    return lambda value_fun: cached_property(value_fun, backed_by=backed_by)
+
+    def _cached_property(value_fun: ValueFunction[_T]) -> Prop[_T]:
+        return cached_property(value_fun, backed_by=backed_by)
+
+    return _cached_property

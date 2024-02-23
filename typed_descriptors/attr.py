@@ -14,20 +14,29 @@ from typing import (
     Protocol,
     Type,
     TypeVar,
+    Union,
     final,
     get_type_hints,
     overload,
 )
+from typing_extensions import Self
 from typing_validation import validate
 from .base import DescriptorBase, T
 
-if sys.version_info[1] >= 12:
-    from typing import Self
-else:
-    from typing_extensions import Self
+
+_T = TypeVar("_T")
+""" Invariant type variable for generic values, privately used. """
 
 T_contra = TypeVar("T_contra", contravariant=True)
 """ Contravariant type variable for generic values. """
+
+
+class SupportsBool(Protocol):
+    """
+    Structural types for things which can be converted to :obj:`bool`.
+    """
+
+    def __bool__(self) -> bool: ...
 
 
 class ValidatorFunction(Protocol[T_contra]):
@@ -35,7 +44,9 @@ class ValidatorFunction(Protocol[T_contra]):
     Structural type for the validator function of a :class:`Attr`.
     """
 
-    def __call__(self, instance: Any, value: T_contra, /) -> bool:
+    def __call__(
+        self, instance: Any, value: T_contra, /
+    ) -> Union[SupportsBool, None]:
         """
         Validates the given value for assignment to a :class:`Attr`,
         in the context of the given instance.
@@ -46,7 +57,20 @@ class ValidatorFunction(Protocol[T_contra]):
         the given ``value`` has already passed its runtime typecheck.
         Validator functions can use ``instance`` to perform validation
         involving other descriptors for the same class.
+
+        There are two ways in which a validator function can trigger an error
+        as part of the validation logic for an :class:`Attr`:
+
+        - By returning :obj:`False`: a :obj:`ValueError` will be raised.
+        - By raising any exception as part of its body: the exception is
+          caught as part of a `try...except` block, and a :obj:`ValueError`
+          is raised from it (preserving the original error information).
+
+        In the second case, the validator should return :obj:`True` at the
+        end, to signal that validation was successful.
+
         """
+        ...
 
 
 def validate_validator_fun(validator_fun: ValidatorFunction[T], /) -> None:
@@ -94,6 +118,7 @@ class ValidatedAttrFactory(Protocol):
         """
         Returns a validated :class:`Attr` from a validator function.
         """
+        ...
 
 
 class Attr(DescriptorBase[T]):
@@ -117,8 +142,7 @@ class Attr(DescriptorBase[T]):
         *,
         readonly: bool = False,
         backed_by: Optional[str] = None,
-    ) -> Attr[T]:
-        ...
+    ) -> Attr[T]: ...
 
     @staticmethod
     @overload
@@ -128,8 +152,7 @@ class Attr(DescriptorBase[T]):
         *,
         readonly: bool = False,
         backed_by: Optional[str] = None,
-    ) -> ValidatedAttrFactory:
-        ...
+    ) -> ValidatedAttrFactory: ...
 
     @staticmethod
     def validator(
@@ -187,14 +210,16 @@ class Attr(DescriptorBase[T]):
                 readonly=readonly,
                 backed_by=backed_by,
             )
-        return lambda validator_fun: Attr.validator(
-            validator_fun, readonly=readonly, backed_by=backed_by
-        )
+
+        def _validated_attr(validator_fun: ValidatorFunction[_T]) -> Attr[_T]:
+            return Attr.validator(
+                validator_fun, readonly=readonly, backed_by=backed_by
+            )
+
+        return _validated_attr
 
     __readonly: bool
     __validator_fun: Optional[ValidatorFunction[T]]
-
-    __slots__ = ("__readonly", "__validator_fun")
 
     @overload
     def __init__(
@@ -249,6 +274,7 @@ class Attr(DescriptorBase[T]):
         super().__init__(type, backed_by=backed_by)
         if validator is not None:
             validate_validator_fun(validator)
+            self.__doc__ = validator.__doc__
         self.__validator_fun = validator
         self.__readonly = bool(readonly)
 
@@ -288,12 +314,10 @@ class Attr(DescriptorBase[T]):
         return self._is_set_on(instance)
 
     @overload
-    def __get__(self, instance: None, _: Type[Any]) -> Self:
-        ...
+    def __get__(self, instance: None, _: Type[Any]) -> Self: ...
 
     @overload
-    def __get__(self, instance: Any, _: Type[Any]) -> T:
-        ...
+    def __get__(self, instance: Any, _: Type[Any]) -> T: ...
 
     @final
     def __get__(self, instance: Any, _: Type[Any]) -> T | Self:
@@ -340,7 +364,7 @@ class Attr(DescriptorBase[T]):
         if validator is not None:
             try:
                 res = validator(instance, value)
-                if not res:
+                if res is not None and not res:
                     raise ValueError(
                         f"Invalid value for attribute {self}: {value!r}"
                     )
@@ -382,16 +406,14 @@ class Attr(DescriptorBase[T]):
 
             Color.hue
         """
-        type_name = type(self).__name__
         owner_name = self.owner.__name__
         name = self.name
-        return f"{type_name} {owner_name}.{name}"
+        return f"{owner_name}.{name}"
 
     def __repr__(self) -> str:
         """
         Representation of this attribute, inclusive of the following info:
 
-        - the :class:`Attr` subclass
         - the :attr:`owner` name
         - the attribute :attr:`name`
         - the attribute :attr:`type`
@@ -405,7 +427,6 @@ class Attr(DescriptorBase[T]):
             <readonly Attr Color.saturation: int>
 
         """
-        descr_cls = type(self).__name__
         owner = self.owner.__name__
         name = self.name
         ty = (
@@ -414,4 +435,4 @@ class Attr(DescriptorBase[T]):
             else str(self.type)
         )
         qualifier = "readonly " if self.readonly else ""
-        return f"<{qualifier}{descr_cls} {owner}.{name}: {ty}>"
+        return f"<{qualifier}Attr {owner}.{name}: {ty}>"

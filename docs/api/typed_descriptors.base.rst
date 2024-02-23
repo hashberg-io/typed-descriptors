@@ -16,6 +16,19 @@ T
 
 .. autodata:: typed_descriptors.base.T
 
+T_co
+----
+
+.. autodata:: typed_descriptors.base.T_co
+
+TypedDescriptor
+---------------
+
+.. autoclass:: typed_descriptors.base.TypedDescriptor
+    :show-inheritance:
+    :members:
+    :special-members: __descriptor_type__, __set_name__, __get__
+
 name_mangle
 -----------
 

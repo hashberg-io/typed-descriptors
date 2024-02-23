@@ -3,9 +3,16 @@
     "pkg_path": "../",
     "apidocs_folder": "api",
     "toc_filename": "api-toc.rst",
-    "include_members": {},
+    "include_members": {
+    },
     "exclude_members": {
     },
     "include_modules": [],
-    "exclude_modules": []
+    "exclude_modules": ["typed_descriptors.mypy_plugin"],
+    "special_class_members": {
+        "typed_descriptors.base.TypedDescriptor":[
+            "__descriptor_type__"
+        ]
+
+    }
 }

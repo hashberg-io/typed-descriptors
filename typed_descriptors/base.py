@@ -10,21 +10,18 @@ from abc import abstractmethod
 import sys
 from typing import (
     Any,
-    Generic,
     Optional,
+    Protocol,
     Type,
     TypeVar,
     Union,
     cast,
     final,
     overload,
+    runtime_checkable,
 )
+from typing_extensions import Self
 from typing_validation import can_validate, validate
-
-if sys.version_info[1] >= 12:
-    from typing import Self
-else:
-    from typing_extensions import Self
 
 
 def name_mangle(owner: type, attr_name: str) -> str:
@@ -53,8 +50,50 @@ def name_unmangle(owner: type, attr_name: str) -> str:
 T = TypeVar("T")
 """ Invariant type variable for generic values. """
 
+T_co = TypeVar("T_co", covariant=True)
+""" Invariant type variable for generic values. """
 
-class DescriptorBase(Generic[T]):
+
+@runtime_checkable
+class TypedDescriptor(Protocol[T_co]):
+    """
+    Structural type for typed descriptors.
+    """
+
+    __descriptor_type__: Any  # Will be TypeForm[T_co]
+    """
+    Indicates the type (or type annotation, if a string) for the descriptor.
+
+    :meta public:
+    """
+
+    def __set_name__(self, owner: Type[Any], name: str) -> None:
+        """
+        Hook called when the descriptor is assigned to a class attribute,
+        usually responsible for setting the owner and name of the descriptor.
+
+        :meta public:
+        """
+
+    @overload
+    def __get__(self, instance: None, _: Type[Any]) -> Self: ...
+
+    @overload
+    def __get__(self, instance: Any, _: Type[Any]) -> T_co: ...
+
+    def __get__(self, instance: Any, _: Type[Any]) -> T_co | Self:
+        """
+        If the descriptor is accessed on an instance, returns the value of
+        the descriptor on the given instance.
+
+        If the descriptor is accessed on the owner class, i.e. if
+        ``instance`` is :obj:`None`, returns the descriptor object itself.
+
+        :meta public:
+        """
+
+
+class DescriptorBase(TypedDescriptor[T]):
     """
     Base class for descriptors backed by an attribute whose name and access mode
     is determined by the following logic.
@@ -113,6 +152,7 @@ class DescriptorBase(Generic[T]):
         "__backed_by",
         "__use_dict",
         "__temp_backed_by",
+        "__descriptor_type__",
     )
 
     @overload
@@ -162,6 +202,7 @@ class DescriptorBase(Generic[T]):
         validate(backed_by, Optional[str])
         self.__type = type
         self.__temp_backed_by = backed_by
+        self.__descriptor_type__ = type
 
     @final
     @property
@@ -312,13 +353,11 @@ class DescriptorBase(Generic[T]):
 
     @abstractmethod
     @overload
-    def __get__(self, instance: None, _: Type[Any]) -> Self:
-        ...
+    def __get__(self, instance: None, _: Type[Any]) -> Self: ...
 
     @abstractmethod
     @overload
-    def __get__(self, instance: Any, _: Type[Any]) -> T:
-        ...
+    def __get__(self, instance: Any, _: Type[Any]) -> T: ...
 
     @abstractmethod
     def __get__(self, instance: Any, _: Type[Any]) -> T | Self:
