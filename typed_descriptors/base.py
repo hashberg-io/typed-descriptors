@@ -26,14 +26,39 @@ from typing_validation import can_validate, validate
 
 def is_dict_available(owner: type) -> bool:
     """
-    Checks whether instances of a given type have ``__dict__`` available.
-    Returns :obj:`True` if either:
+    Checks whether instances of a descriptor owner class have ``__dict__``.
+    Returns :obj:`True` if the MRO root ``owner.__mro__[-1]`` is not
+    :obj:`object`, or if the following is true for any class ``cls`` in
+    ``owner.__mro__[:-1]`` (i.e. excluding the MRO root):
 
-    - the MRO root ``owner.__mro__[-1]`` is not :obj:`object`;
-    - one of the classes in ``owner.__mro__[:-1]`` (i.e. excluding the MRO root)
-      either does not define ``__slots__`` or defines ``__dict__`` in its slots.
+    1. ``cls`` has no ``__slots__`` attribute
+    2. the ``__slots__`` attribute of ``cls`` is empty
+    3. ``__dict__`` appears in the the ``__slots__`` attribute of ``cls``
 
     Otherwise, returns :obj:`False`.
+
+    .. warning ::
+
+        If the function returns :obj:`False`, then ``__dict__`` is certainly
+        not available. However, it is possible for a class ``cls`` in the MRO to
+        satisfy one of the three conditions above and for ``__dict__`` to not be
+        available on instances of the descriptor owner class. For example:
+
+        1. The ``__slots__`` attribute might have been deleted at some point
+           after the slots creation process.
+        2. The ``__slots__`` attribute contents might have been cleared, or it
+           might have been an iterable which as been fully consumed as part of
+           the slots creation process.
+        3. A ``__dict__`` entry might have been added to ``__slots__`` at some
+           point after the slots creation process.
+
+        If this happens somewhere in the MRO of the owner class being inspected,
+        the library will incorrectly infer that ``__dict__`` is available on
+        class instances, resulting in incorrect behaviour.
+        In such situations, please manually set ``use_dict`` to :obj:`False` in
+        attribute constructors to ensure that the ``__dict__`` mechanism is not
+        used to back the descriptor.
+
     """
     mro = owner.__mro__
     if mro[-1] != object:
@@ -41,9 +66,28 @@ def is_dict_available(owner: type) -> bool:
     for cls in mro[:-1]:
         if not hasattr(cls, "__slots__"):
             return True
+        if not cls.__slots__:
+            return True
         if "__dict__" in cls.__slots__:
             return True
     return False
+
+def class_slots(cls: type) -> tuple[str, ...] | None:
+    """
+    Returns a tuple consisting of all slots for the given class and all
+    non-private slots for all classes in its MRO.
+    Returns :obj:`None` if slots are not defined for the class.
+    """
+    if not hasattr(cls, "__slots__"):
+        return None
+    slots: list[str] = list(cls.__slots__)
+    for cls in cls.__mro__[1:-1]:
+        for slot in getattr(cls, "__slots__", ()):
+            assert isinstance(slot, str)
+            if slot.startswith("__") and not slot.endswith("__"):
+                continue
+            slots.append(slot)
+    return tuple(slots)
 
 def name_mangle(owner: type, attr_name: str) -> str:
     """
@@ -113,39 +157,43 @@ class TypedDescriptor(Protocol[T_co]):
         :meta public:
         """
 
-
 class DescriptorBase(TypedDescriptor[T]):
     """
     Base class for descriptors backed by an attribute whose name and access mode
     is determined by the following logic.
 
-    Naming logic for backing attribute:
+    Logic for using ``__dict__`` vs "attr" functions for access to the
+    backing attribute:
 
-    1. If the ``backed_by`` argument is specified in the constructor, the string
-       passed to it is used as name for the backing attribute.
-    2. Else, if ``__dict__`` is available (see :func:`is_dict_available`), then
-       the backing attribute name coincides with the descriptor name.
+    1. If the ``use_dict`` argument is set to :obj:`True` in the descriptor
+       constructor, then ``__dict__`` will be used. If the library is certain
+       that ``__dict__`` is not available on instances of the descriptor owner
+       class (cf. :func:`is_dict_available`), then a :obj:`TypeError` is raised
+       at the time when ``__set_name__`` is called.
+    2. If the ``use_dict`` argument is set to :obj:`False` in the descriptor
+       constructor, then the "attr" functions :func:`getattr`, :func:`setattr`,
+       :func:`delattr` and :func:`hasattr` will be used. If the library is
+       certain that ``__dict__`` is not available on instances of the descriptor
+       owner class (cf. :func:`is_dict_available`) and the backing attribute
+       name is not present in the class slots (cf. :func:`class_slots`), then a
+       :obj:`TypeError` is raised at the time when ``__set_name__`` is called.
+    3. If ``use_dict`` is set to :obj:`None` (default value) in the descriptor
+       constructor, then :func:`is_dict_available` is called and ``use_dict`` is
+       set to the resulting value. Further validation is then performed as
+       described in points 1. and 2. above.
+
+    Naming logic for the backing attribute:
+
+    1. If the ``backed_by`` argument is specified in the descriptor constructor,
+       the string passed to it is used as name for the backing attribute.
+    2. Else, if using ``__dict__`` for access to the backing attribute, then the
+       backing attribute name coincides with the descriptor name.
     3. Else, the backing attribute name is obtained by prepending one or
        two underscores to the descriptor name (one if the descriptor name starts
        with underscore, two if it doesn't).
 
-    Access logic for backing attribute:
-
-    1. If ``__dict__`` is available (see :func:`is_dict_available`), the backing
-       attribute is accessed via ``__dict__`` if its name coincides with the
-       descriptor name, and via ``___attr`` functions otherwise.
-    2. Else, the backing attribute is accessed via ``___attr`` functions.
-
-    Above, the nomenclature "``___attr`` functions" refers to :func:`getattr`,
-    :func:`setattr`, :func:`delattr` and :func:`hasattr`.
-
     If the backing attribute name starts with two underscores but does not end
     with two underscores, name-mangling is automatically performed.
-
-    If ``__dict__`` is not available (see :func:`is_dict_available`) and the
-    backing attribute name does not appear in ``__slots__``, a :obj:`TypeError`
-    is raised at the time when the descriptor is assigned (or, more precisely,
-    at the time when its ``__set_name__`` method is called).
     """
 
     # Attributes set by constructor:
@@ -158,6 +206,7 @@ class DescriptorBase(TypedDescriptor[T]):
     __use_dict: bool
 
     # Attribute set by constructor and deleted by __set_name__:
+    __temp_use_dict: Optional[bool]
     __temp_backed_by: Optional[str]
 
     __slots__ = (
@@ -166,6 +215,7 @@ class DescriptorBase(TypedDescriptor[T]):
         "__owner",
         "__backed_by",
         "__use_dict",
+        "__temp_use_dict",
         "__temp_backed_by",
         "__descriptor_type__",
     )
@@ -177,6 +227,7 @@ class DescriptorBase(TypedDescriptor[T]):
         /,
         *,
         backed_by: Optional[str] = None,
+        use_dict: Optional[bool] = None,
     ) -> None:
         # pylint: disable = redefined-builtin
         ...
@@ -188,6 +239,7 @@ class DescriptorBase(TypedDescriptor[T]):
         /,
         *,
         backed_by: Optional[str] = None,
+        use_dict: Optional[bool] = None,
     ) -> None:
         # pylint: disable = redefined-builtin
         ...
@@ -198,13 +250,17 @@ class DescriptorBase(TypedDescriptor[T]):
         /,
         *,
         backed_by: Optional[str] = None,
+        use_dict: Optional[bool] = None,
     ) -> None:
         """
         Creates a new descriptor with the given type and optional validator.
 
         :param type: the type of the descriptor.
-        :param backed_by: the name of the backing attribute for the
-                          descriptor, or :obj:`None` to use a default name.
+        :param backed_by: name for the backing attribute (optional, default name
+                          used if not specified).
+        :param use_dict: whether to use ``__dict__`` or slots for access to the
+                         backing attribute (optional, automatically determined
+                         if not specified).
 
         :raises TypeError: if the type cannot be validated by the
                            :mod:`typing_validation` library.
@@ -217,6 +273,7 @@ class DescriptorBase(TypedDescriptor[T]):
         validate(backed_by, Optional[str])
         self.__type = type
         self.__temp_backed_by = backed_by
+        self.__temp_use_dict = use_dict
         self.__descriptor_type__ = type
 
     @final
@@ -333,57 +390,37 @@ class DescriptorBase(TypedDescriptor[T]):
         name = name_unmangle(owner, name)
         # 3. Compute backing attribute name and whether to use __dict__:
         temp_backed_by = self.__temp_backed_by
-        if is_dict_available(owner):
+        temp_use_dict = self.__temp_use_dict
+        dict_available = is_dict_available(owner)
+        owner_slots = class_slots(owner)
+        use_dict = dict_available if temp_use_dict is None else temp_use_dict
+        if use_dict:
+            if not dict_available:
+                raise TypeError(
+                    "Cannot set use_dict=True in descriptor constructor: "
+                    "__dict__ not available on instances of owner class."
+                )
             if temp_backed_by is None:
                 temp_backed_by = name
-            use_dict = temp_backed_by == name
-            assert (
-                not use_dict
-                or not hasattr(owner, "__slots__")
-                or name not in owner.__slots__
-            )
         else:
-            assert hasattr(owner, "__slots__"), dir(owner)
+            if owner_slots is None:
+                raise TypeError(
+                    "Slots are not available on descriptor owner class: "
+                    "please set use_dict=True in the descriptor constructor."
+                )
             if temp_backed_by is None:
                 if name.startswith("_"):
                     temp_backed_by = f"_{name}"
                 else:
                     temp_backed_by = f"__{name}"
-            use_dict = False
-            if temp_backed_by not in owner.__slots__:
+            if temp_backed_by not in owner_slots:
                 raise TypeError(
-                    "When __slots__ are used and __dict__ is not available, "
-                    f"the name of the backing attribtue {temp_backed_by!r} "
-                    "must appear in __slots__."
+                    f"Backing attribute {temp_backed_by!r} does not appear in "
+                    "the slots of the descriptor owner class. You can either: "
+                    "(i) add the backing attribute name to the __slots__, or "
+                    "(ii) set use_dict=True in the descriptor constructor, "
+                    "as long as __dict__ is available on owner class instances."
                 )
-        # if not hasattr(owner, "__slots__"):
-        #     assert hasattr(owner, "__dict__"), dir(owner)
-        #     if temp_backed_by is None:
-        #         temp_backed_by = name
-        #     use_dict = temp_backed_by == name
-        # else: # owner has __slots__ defined
-        #     __slots__ = owner.__slots__
-        #     if temp_backed_by in __slots__:
-        #         assert temp_backed_by is not None
-        #         use_dict = False
-        #     elif hasattr(owner, "__dict__"):
-        #         if temp_backed_by is None:
-        #             temp_backed_by = name
-        #         use_dict = temp_backed_by == name
-        #     else:
-        #         # __dict__ is not available and
-        #         use_dict = False
-        #         if temp_backed_by is None:
-        #             if name.startswith("_"):
-        #                 temp_backed_by = f"_{name}"
-        #             else:
-        #                 temp_backed_by = f"__{name}"
-        #         if temp_backed_by not in __slots__:
-        #             raise TypeError(
-        #                 "When __slots__ are used and __dict__ is not available, "
-        #                 f"the name of the backing attribtue {temp_backed_by!r} "
-        #                 "must appear in __slots__."
-        #             )
         backed_by = name_mangle(owner, temp_backed_by)
         # 4. Set owner, name (not name-mangled) and backed_by (name-mangled):
         self.__owner = owner

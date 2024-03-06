@@ -29,6 +29,11 @@ TypedDescriptor
     :members:
     :special-members: __descriptor_type__, __set_name__, __get__
 
+class_slots
+-----------
+
+.. autofunction:: typed_descriptors.base.class_slots
+
 is_dict_available
 -----------------
 

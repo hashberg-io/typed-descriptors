@@ -58,4 +58,5 @@ def test_base_set_name_slots_error(backed_by: Optional[str]) -> None:
     with pytest.raises(name_slot_error):
         class C:
             x = Attr(int, lambda _, x: x >= 0, backed_by=backed_by)
-            __slots__ = ()
+            __slots__ = ("some_other_attr")
+            # Recall that __slots__ = () is interpreted as not declaring slots
