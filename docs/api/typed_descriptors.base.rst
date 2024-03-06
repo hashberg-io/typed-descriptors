@@ -29,6 +29,11 @@ TypedDescriptor
     :members:
     :special-members: __descriptor_type__, __set_name__, __get__
 
+is_dict_available
+-----------------
+
+.. autofunction:: typed_descriptors.base.is_dict_available
+
 name_mangle
 -----------
 
