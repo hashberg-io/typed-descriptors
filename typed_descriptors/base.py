@@ -72,6 +72,7 @@ def is_dict_available(owner: type) -> bool:
             return True
     return False
 
+
 def class_slots(cls: type) -> tuple[str, ...] | None:
     """
     Returns a tuple consisting of all slots for the given class and all
@@ -88,6 +89,7 @@ def class_slots(cls: type) -> tuple[str, ...] | None:
                 continue
             slots.append(slot)
     return tuple(slots)
+
 
 def name_mangle(owner: type, attr_name: str) -> str:
     """
@@ -156,6 +158,7 @@ class TypedDescriptor(Protocol[T_co]):
 
         :meta public:
         """
+
 
 class DescriptorBase(TypedDescriptor[T]):
     """

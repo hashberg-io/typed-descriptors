@@ -9,6 +9,7 @@ import typing
 from mypy.plugin import FunctionContext, Plugin
 from mypy.types import CallableType, Instance, get_proper_type, Type
 
+
 def typed_descriptor_hook(ctx: FunctionContext) -> Type:
     """
     Extracts the descriptor type and assigns it to the generic type parameter,
@@ -26,10 +27,12 @@ def typed_descriptor_hook(ctx: FunctionContext) -> Type:
         return ret_t
     return ret_t
 
+
 _function_hooks = {
     "typed_descriptors.attr.Attr": typed_descriptor_hook,
     "typed_descriptors.prop.Prop": typed_descriptor_hook,
 }
+
 
 class TypedDescriptorsPlugin(Plugin):
     """
@@ -44,6 +47,7 @@ class TypedDescriptorsPlugin(Plugin):
         if hook is not None:
             return hook
         return super().get_function_hook(fullname)
+
 
 def plugin(version: str) -> typing.Type[TypedDescriptorsPlugin]:
     """

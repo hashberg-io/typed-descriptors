@@ -141,6 +141,7 @@ class Attr(DescriptorBase[T]):
         *,
         readonly: bool = False,
         backed_by: Optional[str] = None,
+        use_dict: Optional[bool] = None,
     ) -> Attr[T]: ...
 
     @staticmethod
@@ -151,6 +152,7 @@ class Attr(DescriptorBase[T]):
         *,
         readonly: bool = False,
         backed_by: Optional[str] = None,
+        use_dict: Optional[bool] = None,
     ) -> ValidatedAttrFactory: ...
 
     @staticmethod
@@ -160,6 +162,7 @@ class Attr(DescriptorBase[T]):
         *,
         readonly: bool = False,
         backed_by: Optional[str] = None,
+        use_dict: Optional[bool] = None,
     ) -> ValidatedAttrFactory | Attr[T]:
         """
         Decorator used to create an :class:`Attr` from a validator function,
@@ -208,11 +211,15 @@ class Attr(DescriptorBase[T]):
                 validator=validator_fun,
                 readonly=readonly,
                 backed_by=backed_by,
+                use_dict=use_dict,
             )
 
         def _validated_attr(validator_fun: ValidatorFunction[_T]) -> Attr[_T]:
             return Attr.validator(
-                validator_fun, readonly=readonly, backed_by=backed_by
+                validator_fun,
+                readonly=readonly,
+                backed_by=backed_by,
+                use_dict=use_dict,
             )
 
         return _validated_attr
@@ -229,6 +236,7 @@ class Attr(DescriptorBase[T]):
         *,
         readonly: bool = False,
         backed_by: Optional[str] = None,
+        use_dict: Optional[bool] = None,
     ) -> None:
         # pylint: disable = redefined-builtin
         ...
@@ -242,6 +250,7 @@ class Attr(DescriptorBase[T]):
         *,
         readonly: bool = False,
         backed_by: Optional[str] = None,
+        use_dict: Optional[bool] = None,
     ) -> None:
         # pylint: disable = redefined-builtin
         ...
@@ -254,6 +263,7 @@ class Attr(DescriptorBase[T]):
         *,
         readonly: bool = False,
         backed_by: Optional[str] = None,
+        use_dict: Optional[bool] = None,
     ) -> None:
         """
         Creates a new attribute with the given type and optional validator.
@@ -261,8 +271,6 @@ class Attr(DescriptorBase[T]):
         :param ty: the type of the attribute
         :param validator: an optional validator function for the attribute
         :param readonly: whether the attribute is read-only
-        :param backed_by: the name of the backing attribute for the
-                          attribute, or :obj:`None` to use a default name
 
         :raises TypeError: if the type is not a valid type
         :raises TypeError: if the validator is not callable
@@ -270,7 +278,7 @@ class Attr(DescriptorBase[T]):
         :meta public:
         """
         # pylint: disable = redefined-builtin
-        super().__init__(type, backed_by=backed_by)
+        super().__init__(type, backed_by=backed_by, use_dict=use_dict)
         if validator is not None:
             validate_validator_fun(validator)
             self.__doc__ = validator.__doc__

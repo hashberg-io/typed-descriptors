@@ -103,13 +103,21 @@ class Prop(DescriptorBase[T]):
     @staticmethod
     @overload
     def value(
-        value_fun: ValueFunction[T], /, *, backed_by: Optional[str] = None
+        value_fun: ValueFunction[T],
+        /,
+        *,
+        backed_by: Optional[str] = None,
+        use_dict: Optional[bool] = None,
     ) -> Prop[T]: ...
 
     @staticmethod
     @overload
     def value(
-        value_fun: None = None, /, *, backed_by: Optional[str] = None
+        value_fun: None = None,
+        /,
+        *,
+        backed_by: Optional[str] = None,
+        use_dict: Optional[bool] = None,
     ) -> PropFactory: ...
 
     @staticmethod
@@ -118,6 +126,7 @@ class Prop(DescriptorBase[T]):
         /,
         *,
         backed_by: Optional[str] = None,
+        use_dict: Optional[bool] = None,
     ) -> PropFactory | Prop[T]:
         """
         An alias for :func:`cached_property`.
@@ -126,7 +135,9 @@ class Prop(DescriptorBase[T]):
         aligned to the :meth:`Attr.validator<typed_descriptors.attr.Attr.validator>`
         decorator for attributes.
         """
-        return cached_property(value_fun, backed_by=backed_by)
+        return cached_property(
+            value_fun, backed_by=backed_by, use_dict=use_dict
+        )
 
     __value_fun: ValueFunction[T]
 
@@ -138,6 +149,7 @@ class Prop(DescriptorBase[T]):
         /,
         *,
         backed_by: Optional[str] = None,
+        use_dict: Optional[bool] = None,
     ) -> None:
         # pylint: disable = redefined-builtin
         ...
@@ -150,6 +162,7 @@ class Prop(DescriptorBase[T]):
         /,
         *,
         backed_by: Optional[str] = None,
+        use_dict: Optional[bool] = None,
     ) -> None:
         # pylint: disable = redefined-builtin
         ...
@@ -161,6 +174,7 @@ class Prop(DescriptorBase[T]):
         /,
         *,
         backed_by: Optional[str] = None,
+        use_dict: Optional[bool] = None,
     ) -> None:
         """
         Creates a new property with the given type and value function.
@@ -177,7 +191,7 @@ class Prop(DescriptorBase[T]):
         """
         # pylint: disable = redefined-builtin
         validate_value_fun(value)
-        super().__init__(type, backed_by=backed_by)
+        super().__init__(type, backed_by=backed_by, use_dict=use_dict)
         if not callable(value):
             raise TypeError(f"Expected callable 'value', got {value!r}.")
         self.__value_fun = value
@@ -310,13 +324,21 @@ class Prop(DescriptorBase[T]):
 
 @overload
 def cached_property(
-    value_fun: ValueFunction[T], /, *, backed_by: Optional[str] = None
+    value_fun: ValueFunction[T],
+    /,
+    *,
+    backed_by: Optional[str] = None,
+    use_dict: Optional[bool] = None,
 ) -> Prop[T]: ...
 
 
 @overload
 def cached_property(
-    value_fun: None = None, /, *, backed_by: Optional[str] = None
+    value_fun: None = None,
+    /,
+    *,
+    backed_by: Optional[str] = None,
+    use_dict: Optional[bool] = None,
 ) -> PropFactory: ...
 
 
@@ -325,6 +347,7 @@ def cached_property(
     /,
     *,
     backed_by: Optional[str] = None,
+    use_dict: Optional[bool] = None,
 ) -> PropFactory | Prop[T]:
     """
     Decorator used to create a cached property from a value function,
@@ -368,9 +391,13 @@ def cached_property(
     """
     if value_fun is not None:
         prop_type = value_fun_return_type(value_fun)
-        return Prop(prop_type, value_fun, backed_by=backed_by)
+        return Prop(
+            prop_type, value_fun, backed_by=backed_by, use_dict=use_dict
+        )
 
     def _cached_property(value_fun: ValueFunction[_T]) -> Prop[_T]:
-        return cached_property(value_fun, backed_by=backed_by)
+        return cached_property(
+            value_fun, backed_by=backed_by, use_dict=use_dict
+        )
 
     return _cached_property
