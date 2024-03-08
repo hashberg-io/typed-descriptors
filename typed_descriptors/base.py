@@ -10,6 +10,7 @@ from abc import abstractmethod
 import sys
 from typing import (
     Any,
+    Literal,
     Optional,
     Protocol,
     Type,
@@ -31,42 +32,16 @@ def is_dict_available(owner: type) -> bool:
     :obj:`object`, or if the following is true for any class ``cls`` in
     ``owner.__mro__[:-1]`` (i.e. excluding the MRO root):
 
-    1. ``cls`` has no ``__slots__`` attribute
-    2. the ``__slots__`` attribute of ``cls`` is empty
-    3. ``__dict__`` appears in the the ``__slots__`` attribute of ``cls``
-
-    Otherwise, returns :obj:`False`.
-
-    .. warning ::
-
-        If the function returns :obj:`False`, then ``__dict__`` is certainly
-        not available. However, it is possible for a class ``cls`` in the MRO to
-        satisfy one of the three conditions above and for ``__dict__`` to not be
-        available on instances of the descriptor owner class. For example:
-
-        1. The ``__slots__`` attribute might have been deleted at some point
-           after the slots creation process.
-        2. The ``__slots__`` attribute contents might have been cleared, or it
-           might have been an iterable which as been fully consumed as part of
-           the slots creation process.
-        3. A ``__dict__`` entry might have been added to ``__slots__`` at some
-           point after the slots creation process.
-
-        If this happens somewhere in the MRO of the owner class being inspected,
-        the library will incorrectly infer that ``__dict__`` is available on
-        class instances, resulting in incorrect behaviour.
-        In such situations, please manually set ``use_dict`` to :obj:`False` in
-        attribute constructors to ensure that the ``__dict__`` mechanism is not
-        used to back the descriptor.
+    1. ``cls`` does not define ``__slots__``, or
+    2. ``__dict__`` appears in the ``__slots__`` for ``cls``
 
     """
     mro = owner.__mro__
-    if mro[-1] != object:
-        return False
+    assert mro[-1] == object, "All classes should inherit from object."
     for cls in mro[:-1]:
         if not hasattr(cls, "__slots__"):
             return True
-        if not cls.__slots__:
+        if "__slots__" not in cls.__dict__:
             return True
         if "__dict__" in cls.__slots__:
             return True
@@ -173,17 +148,18 @@ class DescriptorBase(TypedDescriptor[T]):
        that ``__dict__`` is not available on instances of the descriptor owner
        class (cf. :func:`is_dict_available`), then a :obj:`TypeError` is raised
        at the time when ``__set_name__`` is called.
-    2. If the ``use_dict`` argument is set to :obj:`False` in the descriptor
+    2. If the ``use_slots`` argument is set to :obj:`True` in the descriptor
        constructor, then the "attr" functions :func:`getattr`, :func:`setattr`,
        :func:`delattr` and :func:`hasattr` will be used. If the library is
        certain that ``__dict__`` is not available on instances of the descriptor
        owner class (cf. :func:`is_dict_available`) and the backing attribute
        name is not present in the class slots (cf. :func:`class_slots`), then a
        :obj:`TypeError` is raised at the time when ``__set_name__`` is called.
-    3. If ``use_dict`` is set to :obj:`None` (default value) in the descriptor
-       constructor, then :func:`is_dict_available` is called and ``use_dict`` is
-       set to the resulting value. Further validation is then performed as
-       described in points 1. and 2. above.
+    3. If neither ``use_dict`` nor ``use_slots__`` is set to :obj:`True` in the
+       descriptor constructor (the default case), then :func:`is_dict_available`
+       is called and the result is used to determine whether to use ``__dict__``
+       or slots for the backing attribute. Further validation is then performed,
+       as described in points 1 and 2 above.
 
     Naming logic for the backing attribute:
 
@@ -230,7 +206,8 @@ class DescriptorBase(TypedDescriptor[T]):
         /,
         *,
         backed_by: Optional[str] = None,
-        use_dict: Optional[bool] = None,
+        use_dict: Optional[Literal[True]] = None,
+        use_slots: Optional[Literal[True]] = None,
     ) -> None:
         # pylint: disable = redefined-builtin
         ...
@@ -242,7 +219,8 @@ class DescriptorBase(TypedDescriptor[T]):
         /,
         *,
         backed_by: Optional[str] = None,
-        use_dict: Optional[bool] = None,
+        use_dict: Optional[Literal[True]] = None,
+        use_slots: Optional[Literal[True]] = None,
     ) -> None:
         # pylint: disable = redefined-builtin
         ...
@@ -253,7 +231,8 @@ class DescriptorBase(TypedDescriptor[T]):
         /,
         *,
         backed_by: Optional[str] = None,
-        use_dict: Optional[bool] = None,
+        use_dict: Optional[Literal[True]] = None,
+        use_slots: Optional[Literal[True]] = None,
     ) -> None:
         """
         Creates a new descriptor with the given type and optional validator.
@@ -261,10 +240,10 @@ class DescriptorBase(TypedDescriptor[T]):
         :param type: the type of the descriptor.
         :param backed_by: name for the backing attribute (optional, default name
                           used if not specified).
-        :param use_dict: whether to use ``__dict__`` or slots for access to the
-                         backing attribute (optional, automatically determined
-                         if not specified).
-
+        :param use_dict: if set to :obj:`True`, ``__dict__`` will be used to
+                         store the the backing attribute.
+        :param use_dict: if set to :obj:`True`, ``__slots__`` will be used to
+                         store the the backing attribute.
         :raises TypeError: if the type cannot be validated by the
                            :mod:`typing_validation` library.
 
@@ -274,9 +253,15 @@ class DescriptorBase(TypedDescriptor[T]):
         if not can_validate(type):
             raise TypeError(f"Cannot validate type {type!r}.")
         validate(backed_by, Optional[str])
+        if use_dict and use_slots:
+            raise ValueError(
+                "Cannot set both use_dict=True and use_slots=True."
+            )
         self.__type = type
         self.__temp_backed_by = backed_by
-        self.__temp_use_dict = use_dict
+        self.__temp_use_dict = (
+            True if use_dict else False if use_slots else None
+        )
         self.__descriptor_type__ = type
 
     @final

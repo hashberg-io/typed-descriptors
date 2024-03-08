@@ -10,6 +10,7 @@ from inspect import signature
 import sys
 from typing import (
     Any,
+    Literal,
     Optional,
     Protocol,
     Type,
@@ -107,7 +108,8 @@ class Prop(DescriptorBase[T]):
         /,
         *,
         backed_by: Optional[str] = None,
-        use_dict: Optional[bool] = None,
+        use_dict: Optional[Literal[True]] = None,
+        use_slots: Optional[Literal[True]] = None,
     ) -> Prop[T]: ...
 
     @staticmethod
@@ -117,7 +119,8 @@ class Prop(DescriptorBase[T]):
         /,
         *,
         backed_by: Optional[str] = None,
-        use_dict: Optional[bool] = None,
+        use_dict: Optional[Literal[True]] = None,
+        use_slots: Optional[Literal[True]] = None,
     ) -> PropFactory: ...
 
     @staticmethod
@@ -126,7 +129,8 @@ class Prop(DescriptorBase[T]):
         /,
         *,
         backed_by: Optional[str] = None,
-        use_dict: Optional[bool] = None,
+        use_dict: Optional[Literal[True]] = None,
+        use_slots: Optional[Literal[True]] = None,
     ) -> PropFactory | Prop[T]:
         """
         An alias for :func:`cached_property`.
@@ -136,7 +140,10 @@ class Prop(DescriptorBase[T]):
         decorator for attributes.
         """
         return cached_property(
-            value_fun, backed_by=backed_by, use_dict=use_dict
+            value_fun,
+            backed_by=backed_by,
+            use_dict=use_dict,
+            use_slots=use_slots,
         )
 
     __value_fun: ValueFunction[T]
@@ -149,7 +156,8 @@ class Prop(DescriptorBase[T]):
         /,
         *,
         backed_by: Optional[str] = None,
-        use_dict: Optional[bool] = None,
+        use_dict: Optional[Literal[True]] = None,
+        use_slots: Optional[Literal[True]] = None,
     ) -> None:
         # pylint: disable = redefined-builtin
         ...
@@ -162,7 +170,8 @@ class Prop(DescriptorBase[T]):
         /,
         *,
         backed_by: Optional[str] = None,
-        use_dict: Optional[bool] = None,
+        use_dict: Optional[Literal[True]] = None,
+        use_slots: Optional[Literal[True]] = None,
     ) -> None:
         # pylint: disable = redefined-builtin
         ...
@@ -174,7 +183,8 @@ class Prop(DescriptorBase[T]):
         /,
         *,
         backed_by: Optional[str] = None,
-        use_dict: Optional[bool] = None,
+        use_dict: Optional[Literal[True]] = None,
+        use_slots: Optional[Literal[True]] = None,
     ) -> None:
         """
         Creates a new property with the given type and value function.
@@ -191,7 +201,12 @@ class Prop(DescriptorBase[T]):
         """
         # pylint: disable = redefined-builtin
         validate_value_fun(value)
-        super().__init__(type, backed_by=backed_by, use_dict=use_dict)
+        super().__init__(
+            type,
+            backed_by=backed_by,
+            use_dict=use_dict,
+            use_slots=use_slots,
+        )
         if not callable(value):
             raise TypeError(f"Expected callable 'value', got {value!r}.")
         self.__value_fun = value
@@ -328,7 +343,8 @@ def cached_property(
     /,
     *,
     backed_by: Optional[str] = None,
-    use_dict: Optional[bool] = None,
+    use_dict: Optional[Literal[True]] = None,
+    use_slots: Optional[Literal[True]] = None,
 ) -> Prop[T]: ...
 
 
@@ -338,7 +354,8 @@ def cached_property(
     /,
     *,
     backed_by: Optional[str] = None,
-    use_dict: Optional[bool] = None,
+    use_dict: Optional[Literal[True]] = None,
+    use_slots: Optional[Literal[True]] = None,
 ) -> PropFactory: ...
 
 
@@ -347,7 +364,8 @@ def cached_property(
     /,
     *,
     backed_by: Optional[str] = None,
-    use_dict: Optional[bool] = None,
+    use_dict: Optional[Literal[True]] = None,
+    use_slots: Optional[Literal[True]] = None,
 ) -> PropFactory | Prop[T]:
     """
     Decorator used to create a cached property from a value function,
@@ -392,12 +410,19 @@ def cached_property(
     if value_fun is not None:
         prop_type = value_fun_return_type(value_fun)
         return Prop(
-            prop_type, value_fun, backed_by=backed_by, use_dict=use_dict
+            prop_type,
+            value_fun,
+            backed_by=backed_by,
+            use_dict=use_dict,
+            use_slots=use_slots,
         )
 
     def _cached_property(value_fun: ValueFunction[_T]) -> Prop[_T]:
         return cached_property(
-            value_fun, backed_by=backed_by, use_dict=use_dict
+            value_fun,
+            backed_by=backed_by,
+            use_dict=use_dict,
+            use_slots=use_slots,
         )
 
     return _cached_property
