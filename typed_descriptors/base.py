@@ -44,7 +44,6 @@ def is_dict_available(cls: Any) -> bool:
         # - docs.python.org/3/reference/datamodel.html#object.__mro_entries__
         # - docs.python.org/3/library/types.html#types.get_original_bases
         bases = get_original_bases(cls)
-        print(cls, bases)
         for base in bases:
             if is_dict_available(base):
                 return True
