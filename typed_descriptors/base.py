@@ -7,7 +7,9 @@
 
 from __future__ import annotations
 from abc import abstractmethod
+from collections.abc import Container, Iterable
 import sys
+from types import get_original_bases
 from typing import (
     Any,
     Literal,
@@ -24,27 +26,29 @@ from typing import (
 from typing_extensions import Self
 from typing_validation import can_validate, validate
 
-
-def is_dict_available(owner: type) -> bool:
+def is_dict_available(cls: Any) -> bool:
     """
-    Checks whether instances of a descriptor owner class have ``__dict__``.
-    Returns :obj:`True` if the MRO root ``owner.__mro__[-1]`` is not
-    :obj:`object`, or if the following is true for any class ``cls`` in
-    ``owner.__mro__[:-1]`` (i.e. excluding the MRO root):
-
-    1. ``cls`` does not define ``__slots__``, or
-    2. ``__dict__`` appears in the ``__slots__`` for ``cls``
-
+    Checks whether instances of a descriptor owner class have ``__dict__``
+    available on them.
     """
-    mro = owner.__mro__
-    assert mro[-1] == object, "All classes should inherit from object."
-    for cls in mro[:-1]:
-        if not hasattr(cls, "__slots__"):
-            return True
-        if "__slots__" not in cls.__dict__:
-            return True
-        if "__dict__" in cls.__slots__:
-            return True
+    if cls is object:
+        return False
+    if not hasattr(cls, "__slots__"):
+        return True
+    if hasattr(cls, "__dict__") and "__slots__" not in cls.__dict__:
+        return True
+    if isinstance(cls.__slots__, Container) and "__dict__" in cls.__slots__:
+        return True
+    if isinstance(cls, type):
+        # See:
+        # - peps.python.org/pep-0560/
+        # - docs.python.org/3/reference/datamodel.html#object.__mro_entries__
+        # - docs.python.org/3/library/types.html#types.get_original_bases
+        bases = get_original_bases(cls)
+        print(cls, bases)
+        for base in bases:
+            if is_dict_available(base):
+                return True
     return False
 
 
