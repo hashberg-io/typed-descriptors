@@ -9,7 +9,6 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections.abc import Container, Iterable
 import sys
-from types import get_original_bases
 from typing import (
     Any,
     Literal,
@@ -23,7 +22,7 @@ from typing import (
     overload,
     runtime_checkable,
 )
-from typing_extensions import Self
+from typing_extensions import Self, get_original_bases
 from typing_validation import can_validate, validate
 
 def is_dict_available(cls: Any) -> bool:
