@@ -93,3 +93,17 @@ def test_prop_attr_type_error(y: List[int], decorator: bool) -> None:
     c.y = y
     with pytest.raises(TypeError):
         assert c.x == len(y)
+
+
+@pytest.mark.parametrize("decorator", [False, True])
+@pytest.mark.parametrize("x", [0, "hello"])
+def test_single_prop_no_typecheck(x: int, decorator: bool) -> None:
+    class C:
+        if not decorator:
+            @cached_property(typecheck=False)
+            def x(self) -> int:
+                return x
+        else:
+            x = Prop(int, lambda _: x, typecheck=False) # type: ignore
+    c = C()
+    assert c.x == x

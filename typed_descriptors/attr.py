@@ -144,6 +144,7 @@ class Attr(DescriptorBase[T]):
         backed_by: Optional[str] = None,
         use_dict: Optional[Literal[True]] = None,
         use_slots: Optional[Literal[True]] = None,
+        typecheck: bool = True,
     ) -> Attr[T]: ...
 
     @staticmethod
@@ -156,6 +157,7 @@ class Attr(DescriptorBase[T]):
         backed_by: Optional[str] = None,
         use_dict: Optional[Literal[True]] = None,
         use_slots: Optional[Literal[True]] = None,
+        typecheck: bool = True,
     ) -> ValidatedAttrFactory: ...
 
     @staticmethod
@@ -167,6 +169,7 @@ class Attr(DescriptorBase[T]):
         backed_by: Optional[str] = None,
         use_dict: Optional[Literal[True]] = None,
         use_slots: Optional[Literal[True]] = None,
+        typecheck: bool = True,
     ) -> ValidatedAttrFactory | Attr[T]:
         """
         Decorator used to create an :class:`Attr` from a validator function,
@@ -217,6 +220,7 @@ class Attr(DescriptorBase[T]):
                 backed_by=backed_by,
                 use_dict=use_dict,
                 use_slots=use_slots,
+                typecheck=typecheck,
             )
 
         def _validated_attr(validator_fun: ValidatorFunction[_T]) -> Attr[_T]:
@@ -226,11 +230,13 @@ class Attr(DescriptorBase[T]):
                 backed_by=backed_by,
                 use_dict=use_dict,
                 use_slots=use_slots,
+                typecheck=typecheck,
             )
 
         return _validated_attr
 
     __readonly: bool
+    __typecheck: bool
     __validator_fun: Optional[ValidatorFunction[T]]
 
     @overload
@@ -244,6 +250,7 @@ class Attr(DescriptorBase[T]):
         backed_by: Optional[str] = None,
         use_dict: Optional[Literal[True]] = None,
         use_slots: Optional[Literal[True]] = None,
+        typecheck: bool = True,
     ) -> None:
         # pylint: disable = redefined-builtin
         ...
@@ -259,6 +266,7 @@ class Attr(DescriptorBase[T]):
         backed_by: Optional[str] = None,
         use_dict: Optional[Literal[True]] = None,
         use_slots: Optional[Literal[True]] = None,
+        typecheck: bool = True,
     ) -> None:
         # pylint: disable = redefined-builtin
         ...
@@ -273,6 +281,7 @@ class Attr(DescriptorBase[T]):
         backed_by: Optional[str] = None,
         use_dict: Optional[Literal[True]] = None,
         use_slots: Optional[Literal[True]] = None,
+        typecheck: bool = True,
     ) -> None:
         """
         Creates a new attribute with the given type and optional validator.
@@ -280,6 +289,7 @@ class Attr(DescriptorBase[T]):
         :param ty: the type of the attribute
         :param validator: an optional validator function for the attribute
         :param readonly: whether the attribute is read-only
+        :param typecheck: whether to perform dynamic typechecks (default: True)
 
         :raises TypeError: if the type is not a valid type
         :raises TypeError: if the validator is not callable
@@ -298,6 +308,7 @@ class Attr(DescriptorBase[T]):
             self.__doc__ = validator.__doc__
         self.__validator_fun = validator
         self.__readonly = bool(readonly)
+        self.__typecheck = bool(typecheck)
 
     @final
     @property
@@ -380,7 +391,8 @@ class Attr(DescriptorBase[T]):
                 raise AttributeError(
                     f"Attribute {self} is readonly: it can only be set once."
                 )
-        validate(value, self.type)
+        if self.__typecheck:
+            validate(value, self.type)
         validator = self.__validator_fun
         if validator is not None:
             try:

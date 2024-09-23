@@ -194,3 +194,17 @@ def test_two_attr_value_error(x: Any, y: Any, decorator: bool) -> None:
         C(x, y)
     with pytest.raises(ValueError):
         C(x, x+1).y = y
+
+@pytest.mark.parametrize("decorator", [False, True])
+@pytest.mark.parametrize("x", [0, "hello"])
+def test_single_attr_no_typecheck(x: Any, decorator: bool) -> None:
+    class C:
+        if decorator:
+            @Attr.validator(typecheck=False)
+            def x(self, value: int) -> bool:
+                return True
+        else:
+            x = Attr(int, typecheck=False)
+        def __init__(self, x: int) -> None:
+            self.x = x
+    C(x)

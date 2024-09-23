@@ -97,7 +97,6 @@ T = TypeVar("T")
 T_co = TypeVar("T_co", covariant=True)
 """ Invariant type variable for generic values. """
 
-
 @runtime_checkable
 class TypedDescriptor(Protocol[T_co]):
     """
@@ -237,7 +236,7 @@ class DescriptorBase(TypedDescriptor[T]):
         use_slots: Optional[Literal[True]] = None,
     ) -> None:
         """
-        Creates a new descriptor with the given type and optional validator.
+        Creates a new descriptor with the given type.
 
         :param type: the type of the descriptor.
         :param backed_by: name for the backing attribute (optional, default name
